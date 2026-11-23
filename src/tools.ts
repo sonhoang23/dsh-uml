@@ -2,15 +2,9 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { renderUml, validateUml } from './headless.ts'
+import { jsonObject } from './tool-output.ts'
 
-/** DSH's additionalProperties object contract requires JSON-safe dictionary output,
- * not an interface with optional fields/without an index signature. */
-type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
-
-export function jsonObject(value: unknown): Record<string, JsonValue> {
-  // Strip undefined optional UML result fields, preserving meaningful failures.
-  return JSON.parse(JSON.stringify(value)) as Record<string, JsonValue>
-}
+export { jsonObject } from './tool-output.ts'
 
 const output = {
   schema: { type: 'object', additionalProperties: true } as const,

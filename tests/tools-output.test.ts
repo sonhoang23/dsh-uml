@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { jsonObject } from '../src/tools.ts'
+import { jsonObject } from '../src/tool-output.ts'
 
 describe('DSH UML tool output', () => {
   it('preserves valid SVG as a JSON-compatible dictionary', () => {
