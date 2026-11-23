@@ -14,12 +14,13 @@ const CSS = [
   '.dsh-uml .uml-spacer{flex:1}',
   '.dsh-uml .uml-body{display:flex;flex:1;min-height:0;overflow:hidden}',
   '.dsh-uml .uml-code{flex:1;min-width:130px;min-height:0;resize:none;box-sizing:border-box;border:0;outline:0;padding:12px;background:var(--dsw-alias-bg-layer-1,transparent);color:inherit;font:12px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;tab-size:2}',
-  '.dsh-uml .uml-frame{flex:1;min-width:0;min-height:0;overflow:hidden;position:relative;touch-action:none;cursor:grab;background:var(--dsw-alias-bg-layer-1,transparent)}',
+  // PlantUML's default SVG uses dark labels/lines on transparent paper. Keep the preview paper white even when DSH is in dark mode.
+  '.dsh-uml .uml-frame{flex:1;min-width:0;min-height:0;overflow:hidden;position:relative;touch-action:none;cursor:grab;background:#fff;color:#1f2937;color-scheme:light}',
   '.dsh-uml .uml-frame:active{cursor:grabbing}',
   '.dsh-uml .uml-image{position:absolute;left:50%;top:50%;width:auto;height:auto;max-width:none;max-height:none;transform-origin:center;pointer-events:none;user-select:none}',
   '.dsh-uml .uml-message{padding:7px 12px;margin:0;font-size:12px;color:var(--dsw-alias-text-secondary,inherit);border-top:1px solid var(--dsw-alias-border-subtle,#9995);overflow-wrap:anywhere}',
   '.dsh-uml .uml-error{color:var(--dsw-alias-state-error-primary,#c33)}',
-  '.dsh-uml .uml-blank{display:flex;align-items:center;justify-content:center;flex:1;padding:16px;text-align:center;color:var(--dsw-alias-text-secondary,inherit)}',
+  '.dsh-uml .uml-blank{display:flex;align-items:center;justify-content:center;flex:1;padding:16px;text-align:center;color:#475569}',
 ].join('')
 
 type Mode = 'preview' | 'source' | 'split'
