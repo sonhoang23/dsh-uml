@@ -1,27 +1,15 @@
-import { useEffect, useRef, useState, useCallback, createElement as h } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo, createElement as h } from 'react'
 import type { BetterSidebarService, FileViewerProps } from 'dsh-better-sidebar'
 import { renderBrowser, svgDimensions } from './renderer.ts'
 import { readUml, writeUml, type Scope, type ReadResult } from './fs.ts'
+import { CSS } from './studio-styles.ts'
+import {
+  distance, fitZoom, midpoint, pinchTransform, zoomAt,
+  type Point, type ViewTransform,
+} from './viewport.ts'
 
 const EXAMPLE = '@startuml\nactor User\nparticipant "DSH Agent" as Agent\nparticipant "UML Studio" as UML\nUser -> Agent: Vẽ sequence diagram\nAgent -> UML: PlantUML source\nUML --> Agent: SVG preview\nAgent --> User: Sơ đồ đã tạo\n@enduml'
 
-const CSS = [
-  '.dsh-uml{display:flex;flex-direction:column;height:100%;min-height:280px;min-width:0;color:var(--dsw-alias-text-primary,inherit);font:13px/1.5 system-ui,sans-serif}',
-  '.dsh-uml .uml-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px;border-bottom:1px solid var(--dsw-alias-border-subtle,#9996)}',
-  '.dsh-uml button{font:inherit;cursor:pointer;border-radius:6px;padding:5px 9px;border:1px solid var(--dsw-alias-border-subtle,#7777);background:transparent;color:inherit}',
-  '.dsh-uml button[aria-pressed=true]{background:var(--dsw-alias-bg-layer-3,#aaa3);font-weight:600}',
-  '.dsh-uml button:disabled{opacity:.45;cursor:default}',
-  '.dsh-uml .uml-spacer{flex:1}',
-  '.dsh-uml .uml-body{display:flex;flex:1;min-height:0;overflow:hidden}',
-  '.dsh-uml .uml-code{flex:1;min-width:130px;min-height:0;resize:none;box-sizing:border-box;border:0;outline:0;padding:12px;background:var(--dsw-alias-bg-layer-1,transparent);color:inherit;font:12px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;tab-size:2}',
-  // PlantUML's default SVG uses dark labels/lines on transparent paper. Keep the preview paper white even when DSH is in dark mode.
-  '.dsh-uml .uml-frame{flex:1;min-width:0;min-height:0;overflow:hidden;position:relative;touch-action:none;cursor:grab;background:#fff;color:#1f2937;color-scheme:light}',
-  '.dsh-uml .uml-frame:active{cursor:grabbing}',
-  '.dsh-uml .uml-image{position:absolute;left:50%;top:50%;width:auto;height:auto;max-width:none;max-height:none;transform-origin:center;pointer-events:none;user-select:none}',
-  '.dsh-uml .uml-message{padding:7px 12px;margin:0;font-size:12px;color:var(--dsw-alias-text-secondary,inherit);border-top:1px solid var(--dsw-alias-border-subtle,#9995);overflow-wrap:anywhere}',
-  '.dsh-uml .uml-error{color:var(--dsw-alias-state-error-primary,#c33)}',
-  '.dsh-uml .uml-blank{display:flex;align-items:center;justify-content:center;flex:1;padding:16px;text-align:center;color:#475569}',
-].join('')
 
 type Mode = 'preview' | 'source' | 'split'
 type Toolbar = Pick<FileViewerProps, 'onToolbarState' | 'onToolbarControls' | 'visible'>
@@ -62,13 +50,115 @@ export function Studio(props: StudioProps) {
   const [svg, setSvg] = useState('')
   const [renderError, setRenderError] = useState('')
   const [rendering, setRendering] = useState(false)
-  const [zoom, setZoom] = useState(1)
-  const [pan, setPan] = useState({ x: 0, y: 0 })
-  const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null)
+  const [view, setView] = useState<ViewTransform>({ zoom: 1, pan: { x: 0, y: 0 } })
+  const viewRef = useRef(view)
+  const [autoFit, setAutoFit] = useState(true)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const frameRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const pointers = useRef(new Map<number, Point>())
+  const drag = useRef<{ at: Point; initial: ViewTransform } | null>(null)
+  const pinch = useRef<{ center: Point; gap: number } | null>(null)
+  const selectedMode = useRef(false)
   const fileInput = useRef<HTMLInputElement>(null)
+  const diagramSize = useMemo(() => svg ? svgDimensions(svg) : null, [svg])
   const dirty = draft !== saved
   const isFile = Boolean(path && service && scope)
   const visible = props.visible !== false
+
+  const chooseMode = useCallback((next: Mode) => {
+    selectedMode.current = true
+    setMode(next)
+    setMoreOpen(false)
+  }, [])
+
+  const viewFrame = useRef<number | null>(null)
+  const updateView = useCallback((update: (previous: ViewTransform) => ViewTransform) => {
+    viewRef.current = update(viewRef.current)
+    // Collapse high-frequency pointer moves into at most one React render per frame.
+    if (viewFrame.current !== null) return
+    viewFrame.current = requestAnimationFrame(() => {
+      viewFrame.current = null
+      setView(viewRef.current)
+    })
+  }, [])
+
+  useEffect(() => () => {
+    if (viewFrame.current !== null) cancelAnimationFrame(viewFrame.current)
+  }, [])
+
+  const fit = useCallback(() => {
+    const frame = frameRef.current
+    if (!frame || !diagramSize || frame.clientWidth <= 0 || frame.clientHeight <= 0) return
+    updateView(() => ({
+      zoom: fitZoom(diagramSize, { width: frame.clientWidth, height: frame.clientHeight }, 18),
+      pan: { x: 0, y: 0 },
+    }))
+  }, [diagramSize, updateView])
+
+  const resetFit = () => {
+    setAutoFit(true)
+    fit()
+  }
+
+  const stepZoom = (factor: number) => {
+    const frame = frameRef.current
+    if (!frame) return
+    setAutoFit(false)
+    const size = { width: frame.clientWidth, height: frame.clientHeight }
+    updateView(previous => zoomAt(previous, previous.zoom * factor,
+      { x: size.width / 2, y: size.height / 2 }, size))
+  }
+
+  // DSH embeds Studio in panes of varying width; viewport media queries alone are insufficient.
+  useEffect(() => {
+    const root = rootRef.current
+    if (!root) return
+    const measure = () => {
+      const width = root.getBoundingClientRect().width
+      if (width > 0 && !selectedMode.current) setMode(path || width <= 560 ? 'preview' : 'split')
+    }
+    measure()
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(measure)
+      observer.observe(root)
+      return () => observer.disconnect()
+    }
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [path])
+
+  // Refit after render, orientation change, or a resize of the actual preview pane.
+  useEffect(() => {
+    if (!autoFit || !diagramSize || mode === 'source') return
+    const frame = frameRef.current
+    if (!frame) return
+    fit()
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(fit)
+      observer.observe(frame)
+      return () => observer.disconnect()
+    }
+    window.addEventListener('resize', fit)
+    return () => window.removeEventListener('resize', fit)
+  }, [autoFit, diagramSize, fit, mode])
+
+  useEffect(() => {
+    if (!moreOpen) return
+    const dismiss = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMoreOpen(false)
+    }
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMoreOpen(false)
+    }
+    document.addEventListener('pointerdown', dismiss)
+    document.addEventListener('keydown', escape)
+    return () => {
+      document.removeEventListener('pointerdown', dismiss)
+      document.removeEventListener('keydown', escape)
+    }
+  }, [moreOpen])
 
   useEffect(() => {
     if (dirty) return
@@ -76,6 +166,15 @@ export function Studio(props: StudioProps) {
     setSaved(props.content ?? EXAMPLE)
     setBaseline(mtimeMs)
   }, [props.content, mtimeMs, path])
+
+  // Switching tabs or modes must not preserve stale pointer IDs across gestures.
+  useEffect(() => {
+    if (!visible || mode === 'source') {
+      pointers.current.clear()
+      drag.current = null
+      pinch.current = null
+    }
+  }, [visible, mode])
 
   useEffect(() => {
     if (!visible || mode === 'source') return
@@ -119,9 +218,9 @@ export function Studio(props: StudioProps) {
     })
   }, [onToolbarState, mode, dirty, isFile, saveState])
   useEffect(() => {
-    onToolbarControls?.({ setMode: next => setMode(next === 'preview' ? 'preview' : 'split'), save: () => { void save() } })
+    onToolbarControls?.({ setMode: next => chooseMode(next === 'preview' ? 'preview' : 'split'), save: () => { void save() } })
     return () => onToolbarControls?.(null)
-  }, [onToolbarControls, save])
+  }, [onToolbarControls, save, chooseMode])
 
   const button = (label: string, action: () => void, active?: boolean, disabled?: boolean) =>
     h('button', {
@@ -169,56 +268,176 @@ export function Studio(props: StudioProps) {
     }
   }
 
-  return <div className="dsh-uml" data-dsh-uml-studio="">
+  const reloadFile = () => {
+    if (!onReload) return
+    if (dirty && !window.confirm('Bỏ các thay đổi chưa lưu?')) return
+    setDraft(saved)
+    setMoreOpen(false)
+    onReload()
+  }
+  const exportSource = () => download(
+    new Blob([draft], { type: 'text/plain;charset=utf-8' }), nameStem(path) + '.puml')
+  const exportSvg = () => {
+    if (svg) download(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }), nameStem(path) + '.svg')
+  }
+
+  const pointerPosition = (event: React.PointerEvent<HTMLDivElement>): Point => {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    return { x: event.clientX - bounds.left, y: event.clientY - bounds.top }
+  }
+  const pointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    const point = pointerPosition(event)
+    pointers.current.set(event.pointerId, point)
+    event.currentTarget.setPointerCapture(event.pointerId)
+    if (pointers.current.size === 1) {
+      drag.current = { at: point, initial: viewRef.current }
+      pinch.current = null
+    } else if (pointers.current.size >= 2) {
+      const [a, b] = Array.from(pointers.current.values())
+      pinch.current = { center: midpoint(a, b), gap: Math.max(distance(a, b), 1) }
+      drag.current = null
+    }
+  }
+  const pointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!pointers.current.has(event.pointerId)) return
+    const point = pointerPosition(event)
+    pointers.current.set(event.pointerId, point)
+    if (pointers.current.size >= 2) {
+      const [a, b] = Array.from(pointers.current.values())
+      const center = midpoint(a, b)
+      const gap = Math.max(distance(a, b), 1)
+      if (pinch.current) {
+        const frame = event.currentTarget
+        const previous = pinch.current
+        const size = { width: frame.clientWidth, height: frame.clientHeight }
+        updateView(view => pinchTransform(view, previous.center, center, gap / previous.gap, size))
+        setAutoFit(false)
+      }
+      pinch.current = { center, gap }
+    } else if (drag.current) {
+      const start = drag.current
+      updateView(() => ({
+        zoom: start.initial.zoom,
+        pan: {
+          x: start.initial.pan.x + point.x - start.at.x,
+          y: start.initial.pan.y + point.y - start.at.y,
+        },
+      }))
+      setAutoFit(false)
+    }
+  }
+  const pointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    pointers.current.delete(event.pointerId)
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    if (pointers.current.size >= 2) {
+      const [a, b] = Array.from(pointers.current.values())
+      pinch.current = { center: midpoint(a, b), gap: Math.max(distance(a, b), 1) }
+    } else if (pointers.current.size === 1) {
+      const point = Array.from(pointers.current.values())[0]
+      drag.current = { at: point, initial: viewRef.current }
+      pinch.current = null
+    } else {
+      drag.current = null
+      pinch.current = null
+    }
+  }
+
+  return <div ref={rootRef} className="dsh-uml" data-dsh-uml-studio="">
     <style>{CSS}</style>
+    <input ref={fileInput} type="file" hidden accept=".puml,.plantuml,.uml,.pu,.wsd"
+      onChange={event => {
+        const file = event.currentTarget.files?.[0]
+        if (file) void file.text().then(value => {
+          setDraft(value); setSaved(value); setStatus('Đã mở ' + file.name)
+          setAutoFit(true)
+        })
+        event.currentTarget.value = ''
+      }} />
     <div className="uml-bar">
-      {button('Preview', () => setMode('preview'), mode === 'preview')}
-      {button('Source', () => setMode('source'), mode === 'source')}
-      {button('Split', () => setMode('split'), mode === 'split')}
+      <div className="uml-modes" role="group" aria-label="Editor mode">
+        {button('Preview', () => chooseMode('preview'), mode === 'preview')}
+        {button('Source', () => chooseMode('source'), mode === 'source')}
+        {button('Split', () => chooseMode('split'), mode === 'split')}
+      </div>
       <span className="uml-spacer" />
-      {button('−', () => setZoom(z => Math.max(.2, z / 1.2)), undefined, mode === 'source')}
-      {button('+', () => setZoom(z => Math.min(6, z * 1.2)), undefined, mode === 'source')}
-      {button('Fit', () => { setZoom(1); setPan({ x: 0, y: 0 }) }, undefined, mode === 'source')}
-      {isFile ? button(dirty ? 'Lưu •' : 'Lưu', () => { void save() }, undefined, !dirty || saveState === 'saving') : null}
-      {isFile ? button('Nạp lại', () => {
-        if (dirty && !window.confirm('Bỏ các thay đổi chưa lưu?')) return
-        setDraft(saved); onReload?.()
-      }, undefined, !onReload) : <>
-        {button('Mở .puml', () => fileInput.current?.click())}
-        <input ref={fileInput} type="file" hidden accept=".puml,.plantuml,.uml,.pu,.wsd" onChange={event => {
-          const file = event.currentTarget.files?.[0]
-          if (file) void file.text().then(value => { setDraft(value); setSaved(value); setStatus('Đã mở ' + file.name) })
-          event.currentTarget.value = ''
-        }} />
-      </>}
-      {button('PUML ↓', () => download(new Blob([draft], { type: 'text/plain;charset=utf-8' }), nameStem(path) + '.puml'))}
-      {button('SVG ↓', () => download(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }), nameStem(path) + '.svg'), undefined, !svg)}
-      {button('PNG ↓', () => { void exportPng() }, undefined, !svg)}
+      {isFile ? button(dirty ? 'Lưu •' : 'Lưu', () => { void save() }, undefined,
+        !dirty || saveState === 'saving') : null}
+      <div className="uml-desktop-actions">
+        {button('−', () => stepZoom(1 / 1.2), undefined, mode === 'source' || !svg)}
+        {button('+', () => stepZoom(1.2), undefined, mode === 'source' || !svg)}
+        {button('Fit', resetFit, undefined, mode === 'source' || !svg)}
+        {isFile ? button('Nạp lại', reloadFile, undefined, !onReload) :
+          button('Mở .puml', () => fileInput.current?.click())}
+        {button('PUML ↓', exportSource)}
+        {button('SVG ↓', exportSvg, undefined, !svg)}
+        {button('PNG ↓', () => { void exportPng() }, undefined, !svg)}
+      </div>
+      <div className="uml-more" ref={menuRef}>
+        <button type="button" aria-label="Tùy chọn UML" aria-expanded={moreOpen}
+          onClick={() => setMoreOpen(open => !open)}>•••</button>
+        {moreOpen ? <div className="uml-menu" aria-label="UML file actions">
+          {isFile ? button('Nạp lại', reloadFile, undefined, !onReload) :
+            button('Mở .puml', () => { setMoreOpen(false); fileInput.current?.click() })}
+          {button('Xuất PUML', () => { exportSource(); setMoreOpen(false) })}
+          {button('Xuất SVG', () => { exportSvg(); setMoreOpen(false) }, undefined, !svg)}
+          {button('Xuất PNG', () => { void exportPng(); setMoreOpen(false) }, undefined, !svg)}
+        </div> : null}
+      </div>
     </div>
-    <div className="uml-body">
+    <div className="uml-body" data-mode={mode}>
+
       {mode !== 'preview' ? <textarea
         className="uml-code" aria-label="PlantUML source" value={draft}
-        onKeyDown={handleKey} spellCheck={false}
+        onKeyDown={handleKey} spellCheck={false} autoCapitalize="off" autoCorrect="off"
         onChange={event => { setDraft(event.target.value); setSaveState('idle') }}
       /> : null}
       {mode !== 'source' ? <div
-        className="uml-frame" role="img" aria-label="PlantUML diagram preview"
-        onPointerDown={event => {
-          drag.current = { x: event.clientX, y: event.clientY, px: pan.x, py: pan.y }
-          event.currentTarget.setPointerCapture(event.pointerId)
+        ref={frameRef} className="uml-frame" role="region"
+        aria-label="PlantUML diagram preview. Drag to pan, pinch to zoom."
+        tabIndex={0}
+        onPointerDown={pointerDown}
+        onPointerMove={pointerMove}
+        onPointerUp={pointerEnd}
+        onPointerCancel={pointerEnd}
+        onKeyDown={event => {
+          if (event.key === '+' || event.key === '=') { event.preventDefault(); stepZoom(1.2) }
+          else if (event.key === '-') { event.preventDefault(); stepZoom(1 / 1.2) }
+          else if (event.key === '0') { event.preventDefault(); resetFit() }
+          else if (event.key.startsWith('Arrow')) {
+            const offsets: Record<string, Point> = {
+              ArrowLeft: { x: -24, y: 0 }, ArrowRight: { x: 24, y: 0 },
+              ArrowUp: { x: 0, y: -24 }, ArrowDown: { x: 0, y: 24 },
+            }
+            const offset = offsets[event.key]
+            if (offset) {
+              event.preventDefault()
+              setAutoFit(false)
+              updateView(current => ({
+                zoom: current.zoom,
+                pan: { x: current.pan.x + offset.x, y: current.pan.y + offset.y },
+              }))
+            }
+          }
         }}
-        onPointerMove={event => {
-          if (!drag.current) return
-          setPan({ x: drag.current.px + event.clientX - drag.current.x, y: drag.current.py + event.clientY - drag.current.y })
-        }}
-        onPointerUp={() => { drag.current = null }}
-        onPointerCancel={() => { drag.current = null }}
       >
         {svg && svgUrl ? <img className="uml-image" alt="PlantUML rendered diagram" src={svgUrl}
-          style={{ transform: 'translate(calc(-50% + ' + pan.x + 'px), calc(-50% + ' + pan.y + 'px)) scale(' + zoom + ')' }} /> :
+          draggable={false}
+          style={{
+            width: diagramSize?.width, height: diagramSize?.height,
+            transform: 'translate(calc(-50% + ' + view.pan.x + 'px), calc(-50% + ' +
+              view.pan.y + 'px)) scale(' + view.zoom + ')',
+          }} /> :
           <div className="uml-blank">{rendering ? 'Đang vẽ sơ đồ…' : (renderError || 'Chưa có sơ đồ.')}</div>}
       </div> : null}
     </div>
+    {mode !== 'source' ? <div className="uml-mobile-tools" role="group" aria-label="Zoom controls">
+      {button('−', () => stepZoom(1 / 1.2), undefined, !svg)}
+      {button('Fit', resetFit, undefined, !svg)}
+      {button('+', () => stepZoom(1.2), undefined, !svg)}
+    </div> : null}
     <p className={'uml-message' + (renderError || status.startsWith('Không') ? ' uml-error' : '')} role="status">
       {status || renderError || (rendering ? 'Đang cập nhật preview…' : (dirty && isFile ? 'Chưa lưu thay đổi' : 'PlantUML · Local renderer'))}
     </p>

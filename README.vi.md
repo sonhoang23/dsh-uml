@@ -30,6 +30,7 @@ Thay vì chuyển sang một trình biên tập bên ngoài, bạn có thể vi�
 | --- | --- |
 | **Preview / Source / Split:** xem hình, xem mã, hoặc làm việc song song. | **Native UML Studio:** mở từ menu tạo tab mới ở sidebar phải, không cần Better Sidebar. |
 | **Zoom, pan, fit:** phóng to, di chuyển, căn vừa; xuất `.puml`, SVG và PNG. | **Better Sidebar (tùy chọn):** mở, xem và sửa file UML trực tiếp trong Files. |
+| **Mobile UX (đang thử nghiệm):** toolbar gọn, Split xếp dọc, kéo/chụm hai ngón, tự căn sơ đồ vào khung. | **Tương thích pane hẹp:** layout dựa trên chiều rộng vùng chứa DSH, không chỉ kích thước màn hình. |
 | **Render cục bộ:** PlantUML TeaVM + Viz.js trong trình duyệt. | **Agent tools:** `uml_validate` để kiểm tra cú pháp, `uml_render` để tạo SVG. |
 
 ### Hình ảnh sản phẩm
@@ -100,6 +101,10 @@ Khi có Better Sidebar, mở file đuôi `.puml`, `.plantuml`, `.uml`, `.pu` ho�
 | `uml_render` | Render PlantUML thành chuỗi SVG trả về cho agent. |
 
 Cả hai sử dụng PlantUML TeaVM headless chính thức, **không cần Java**. Muốn lưu `.puml` hoặc `.svg` trong workspace, agent dùng các công cụ file thông thường của DSH; hai UML tools không trực tiếp ghi file.
+
+### Trải nghiệm trên điện thoại (đang thử nghiệm)
+
+Trong khung DSH hẹp, Studio mặc định mở **Preview**, hỗ trợ kéo và chụm hai ngón, nút chạm lớn và Split xếp dọc. Các chức năng này cần được nghiệm thu trên thiết bị thật trước khi công bố ổn định. Xem [checklist kiểm thử mobile](docs/mobile-qa.md).
 
 ## Kiến trúc
 
