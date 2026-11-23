@@ -1,0 +1,12 @@
+@startuml
+title DSH UML Studio - login
+actor User
+participant "DSH Agent" as Agent
+participant "UML Renderer" as Render
+User -> Agent: Generate login flow
+Agent -> Render: Validate PlantUML
+Render --> Agent: valid=true
+Agent -> Render: Render SVG
+Render --> Agent: diagram.svg
+Agent --> User: Preview in UML Studio
+@enduml

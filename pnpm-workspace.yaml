@@ -1,0 +1,6 @@
+packages:
+  - .
+
+autoInstallPeers: false
+
+# Keep dsh-uml install/test isolated from the many unrelated fork packages.

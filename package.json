@@ -1,0 +1,80 @@
+{
+  "name": "dsh-uml",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone PlantUML Studio and optional Better Sidebar UML file viewer for DSH",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.9.0",
+    "dsh": ">=0.2.2-0 <0.3.0"
+  },
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./locale/*.json": "./src/assets/locale/*.json",
+    "./icon": "./src/assets/icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "src/assets/icon.svg",
+    "src/assets/locale/*.json"
+  ],
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "dependencies": {
+    "@plantuml/core": "1.2026.10",
+    "@plantuml/mcp-js": "0.2.2",
+    "@viz-js/viz": "^3.28.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.1.0",
+    "@deepseek-ai/schemastery": "^3.19.0",
+    "@deepseek-ai/dsh-tools": ">=0.2.2-rc.2 <0.3.0",
+    "@deepseek-ai/dsh-llm": ">=0.2.2-rc.2 <0.3.0",
+    "react": "^18.2.0",
+    "dsh-better-sidebar": "^0.32.1"
+  },
+  "peerDependenciesMeta": {
+    "dsh-better-sidebar": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.1.0",
+    "@deepseek-ai/schemastery": "3.19.0",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.3",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.3",
+    "dsh-better-sidebar": "0.32.1",
+    "react": "18.2.0",
+    "@types/react": "~18.3.1",
+    "@types/node": "^24.0.0",
+    "tsdown": "^0.22.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  },
+  "icon": "./src/assets/icon.svg"
+}

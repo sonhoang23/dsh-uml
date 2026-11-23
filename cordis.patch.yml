@@ -1,0 +1,4 @@
+# Host tools and native client UI. Better Sidebar is OPTIONAL.
+- insert:
+    - id: dsh-uml
+      name: dsh-uml
