@@ -167,6 +167,15 @@ export function Studio(props: StudioProps) {
     setBaseline(mtimeMs)
   }, [props.content, mtimeMs, path])
 
+  // Switching tabs or modes must not preserve stale pointer IDs across gestures.
+  useEffect(() => {
+    if (!visible || mode === 'source') {
+      pointers.current.clear()
+      drag.current = null
+      pinch.current = null
+    }
+  }, [visible, mode])
+
   useEffect(() => {
     if (!visible || mode === 'source') return
     let current = true
