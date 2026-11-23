@@ -50,6 +50,9 @@ Expected build artifacts include `lib/index.js` and `lib/client.js`. A successfu
 
 ## Live acceptance checklist (pending)
 
+Mobile-specific acceptance is tracked separately in the [Mobile UX v1 checklist](mobile-qa.md). Both the native DSH tab and Better Sidebar viewer require real-device testing.
+
+
 These are **test targets**, not claims of verified functionality.
 
 - [ ] Native UML Studio tab opens with Better Sidebar disabled.

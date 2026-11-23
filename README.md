@@ -29,6 +29,7 @@ Turn a PlantUML file into a diagram without switching to an external editor or s
 | --- | --- |
 | **Preview / Source / Split** — inspect a diagram, edit its source, or work side by side. | **Native UML Studio tab** — available in DSH's right-sidebar new-tab menu, independently of Better Sidebar. |
 | **Navigate and export** — zoom, pan, fit, and download `.puml`, SVG, or PNG. | **Optional Better Sidebar viewer** — open and edit UML files directly from Files, with a dedicated tab action. |
+| **Mobile-first controls (experimental)** — responsive toolbar, stacked Split mode, pinch-to-zoom, and auto-fit to the actual pane. | **Container-aware layout** — adapts to narrow DSH tabs as well as phones. |
 | **Local rendering** — browser-side PlantUML TeaVM + Viz.js; no remote PlantUML server/CDN. | **Agent tools** — `uml_validate` checks PlantUML syntax, and `uml_render` generates SVG using a local headless engine. |
 
 ### Preview
@@ -137,6 +138,10 @@ flowchart TB
 - **Security boundary:** external `!include`, `!includeurl`, `!include_sprites`, and `!import` directives are blocked. PlantUML source is limited to **100,000 characters**.
 - **Scope:** one diagram per file is the intended MVP workflow. Cold browser-engine load and isolation still need evaluation before release.
 - **Roadmap ideas (not shipped):** diagram templates, PlantUML blocks inside Markdown, richer syntax diagnostics, and AI-assisted explanations.
+
+### Mobile experience (experimental)
+
+The Studio adapts to the **actual DSH pane width**, not only the device viewport. Narrow layouts default to Preview, stack Split vertically, and provide larger touch controls and pinch-to-zoom. Mobile acceptance on physical devices is still pending; see the [mobile test matrix](docs/mobile-qa.md).
 
 ## Documentation
 
