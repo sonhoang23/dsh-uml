@@ -157,3 +157,7 @@ Issues, reproducible bug reports, and focused pull requests are welcome. Please 
 ## License
 
 Released under the [MIT License](LICENSE). Built on the official PlantUML TeaVM engine and the DSH extension APIs.
+
+## Prebuilt GitHub releases
+
+Versioned experimental tarballs are published on [GitHub Releases](https://github.com/sonhoang23/dsh-uml/releases) by the release workflow after the repository checks pass. Install a published `.tgz` using `dsh plugin --profile web add <tarball-url>` followed by `dsh plugin --profile web install`. The source-install instructions remain available above. Clean-profile installation of the release asset must be verified separately.

@@ -25,3 +25,7 @@ Use the sample file at [`examples/login-sequence.puml`](../examples/login-sequen
 - Do not add empty image references to README before the files exist.
 
 When `studio-split.png` is available and verified, place it near the top of the English and Vietnamese README files with a descriptive caption. Until then, both READMEs deliberately link to the real PlantUML example instead.
+
+## Marketplace icon
+
+`icon-180.png` is the original plugin SVG rasterized to a 180 × 180 PNG for the marketplace. A full UI screenshot is still pending; do not register a mock image or a nonexistent path in `screenshots.json`.

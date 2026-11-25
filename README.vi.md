@@ -149,3 +149,7 @@ Plugin sử dụng extension points sẵn có của DSH, không chỉnh sửa DS
 Bạn có thể gửi issue hoặc pull request kèm các bước tái hiện lỗi, phiên bản DSH/Node và thông tin Better Sidebar có bật hay không. Hãy chạy `pnpm check` trước khi đề xuất thay đổi mã nguồn.
 
 **Giấy phép:** [MIT](LICENSE).
+
+## Bản đóng gói trên GitHub Releases
+
+File `.tgz` thử nghiệm theo phiên bản được tạo tại [GitHub Releases](https://github.com/sonhoang23/dsh-uml/releases) sau khi các bước kiểm tra thành công. Có thể cài file đã phát hành bằng `dsh plugin --profile web add <tarball-url>` rồi chạy `dsh plugin --profile web install`. Vẫn có thể cài từ source như hướng dẫn trên. Cần kiểm thử cài đặt tarball trên profile sạch riêng.

@@ -1,0 +1,68 @@
+name: Build and publish GitHub release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/release.yml']
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - name: Pack and verify package
+        id: pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          name=$(node -p "require('./package.json').name")
+          version=$(node -p "require('./package.json').version")
+          tag="v$version"
+          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "$tag" ]]; then
+            echo "Tag does not match package.json version" >&2
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/package"
+          pnpm pack --pack-destination "$RUNNER_TEMP/package"
+          asset="$RUNNER_TEMP/package/$name-$version.tgz"
+          test -s "$asset"
+          tar -tzf "$asset" > "$RUNNER_TEMP/package-files.txt"
+          for file in package/package.json package/cordis.patch.yml package/lib/index.js package/lib/client.js package/lib/index.d.ts; do
+            grep -Fx "$file" "$RUNNER_TEMP/package-files.txt"
+          done
+          tar -xOzf "$asset" package/package.json | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>{const p=JSON.parse(s);if(!p.dsh?.bundle?.patch || !p.dsh?.client)process.exit(1)})'
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "asset=$asset" >> "$GITHUB_OUTPUT"
+      - name: Publish versioned experimental release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.pack.outputs.tag }}
+          ASSET: ${{ steps.pack.outputs.asset }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; refusing to overwrite."
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fx "$(basename "$ASSET")"
+            exit 0
+          fi
+          gh release create "$TAG" "$ASSET" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$TAG" --prerelease --notes "Experimental prebuilt DSH Web plugin. Built after typecheck, tests and bundle checks. See README for compatibility and installation. Live clean-profile installation has not been verified by CI."
